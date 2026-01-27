@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RhettoricTeach | Interactive Classroom</title>
+    
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons for professional visuals -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #ffffff;
+        }
+
+        .hero-purple {
+            background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%);
+        }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 25px -5px rgba(109, 40, 217, 0.1), 0 10px 10px -5px rgba(109, 40, 217, 0.04);
+        }
+
+        .brand-text {
+            letter-spacing: -0.025em;
+        }
+    </style>
+</head>
+<body class="text-slate-900">
+
+    <!-- Navigation Area -->
+    <nav class="bg-white/80 backdrop-blur-md border-b border-purple-100 sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-6 h-18 flex items-center justify-between py-4">
+            <div class="flex items-center gap-2">
+                <div class="bg-purple-700 p-2 rounded-xl text-yellow-400 shadow-lg shadow-purple-200">
+                    <i data-lucide="zap" class="w-6 h-6 fill-current"></i>
+                </div>
+                <span class="font-extrabold text-2xl brand-text text-purple-900 tracking-tighter">Rhettoric<span class="text-purple-600">Teach</span></span>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-wider">
+                <button onclick="scrollToSection('lessons')" class="text-purple-900/70 hover:text-purple-600 transition">Lessons</button>
+                <button onclick="scrollToSection('about')" class="text-purple-900/70 hover:text-purple-600 transition">Our Mission</button>
+                <button onclick="scrollToSection('contact')" class="bg-yellow-400 text-purple-900 px-6 py-2.5 rounded-full hover:bg-yellow-300 transition shadow-md font-black">Contact</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header id="home" class="hero-purple text-white py-24 px-6 relative overflow-hidden">
+        <!-- Abstract Yellow Circle Decoration -->
+        <div class="absolute -top-24 -right-24 w-64 h-64 bg-yellow-400 rounded-full opacity-10"></div>
+        
+        <div class="max-w-5xl mx-auto text-center relative z-10">
+            <span class="bg-purple-500/30 text-yellow-300 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-6 inline-block">Innovating Education</span>
+            <h1 class="text-5xl md:text-7xl font-black mb-6 leading-tight">Empowering Minds <br/>Through <span class="text-yellow-400">Interaction</span></h1>
+            <p class="text-purple-100 text-xl max-w-2xl mx-auto font-medium">
+                RhettoricTeach bridges the gap between classic literature and modern tech. Interactive tools designed to turn every student into a critical thinker.
+            </p>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-6 py-20">
+
+        <!-- Lessons Section -->
+        <section id="lessons" class="mb-24">
+            <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                <div>
+                    <h2 class="text-4xl font-black text-purple-900 mb-2">The Library</h2>
+                    <p class="text-slate-500 text-lg">Gamified analysis and interactive deep-dives.</p>
+                </div>
+                <div class="flex gap-2">
+                    <span class="bg-purple-100 text-purple-700 px-4 py-1 rounded-lg text-sm font-bold">Literature</span>
+                    <span class="bg-yellow-100 text-yellow-700 px-4 py-1 rounded-lg text-sm font-bold">Civics</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Lesson 1: Tinker v. Des Moines -->
+                <a href="tinker.html" class="group block bg-white border-2 border-purple-50 p-8 rounded-[2rem] shadow-sm card-hover hover:border-purple-200">
+                    <div class="bg-purple-600 text-white w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-200 group-hover:bg-purple-700 transition">
+                        <i data-lucide="book-open-check" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-2xl font-black mb-3 text-purple-950">Tinker v. Des Moines</h3>
+                    <p class="text-slate-600 mb-6 leading-relaxed">Deconstruct Justice Fortas's majority opinion using our interactive logic circuit builder.</p>
+                    <div class="flex items-center text-purple-600 font-extrabold uppercase text-xs tracking-widest group-hover:gap-3 transition-all">
+                        Launch Analysis <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
+                    </div>
+                </a>
+
+                <!-- Lesson 2: Animal Farm Game -->
+                <a href="animal-farm.html" class="group block bg-white border-2 border-purple-50 p-8 rounded-[2rem] shadow-sm card-hover hover:border-purple-200">
+                    <div class="bg-yellow-400 text-purple-900 w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-yellow-100 group-hover:bg-yellow-500 transition">
+                        <i data-lucide="swords" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-2xl font-black mb-3 text-purple-950">Animal Farm: The Rebellion</h3>
+                    <p class="text-slate-600 mb-6 leading-relaxed">Navigate the farm, manage resources, and survive the Seven Commandments in this RPG review.</p>
+                    <div class="flex items-center text-purple-600 font-extrabold uppercase text-xs tracking-widest group-hover:gap-3 transition-all">
+                        Play Game < i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="bg-purple-900 rounded-[3rem] p-10 md:p-16 mb-24 relative overflow-hidden">
+            <div class="absolute bottom-0 right-0 w-32 h-32 bg-yellow-400 opacity-10 rounded-tl-full"></div>
+            <div class="flex flex-col md:flex-row gap-16 items-center relative z-10">
+                <div class="w-48 h-48 bg-purple-800 rounded-3xl rotate-3 flex-shrink-0 flex items-center justify-center text-yellow-400 shadow-2xl border-2 border-purple-700">
+                    <i data-lucide="cpu" class="w-24 h-24"></i>
+                </div>
+                <div>
+                    <h2 class="text-4xl font-black mb-6 text-white">The RhettoricTeach Mission</h2>
+                    <p class="text-purple-100 leading-relaxed mb-8 text-lg">
+                        We believe that rhetoric isn't just about speaking—it's about understanding how systems work. By turning worksheets into apps and readings into worlds, we help students master the "Rhettoric" of the modern age.
+                    </p>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="bg-purple-800/50 p-4 rounded-2xl border border-purple-700/50">
+                            <span class="block text-yellow-400 font-black text-2xl mb-1">100%</span>
+                            <span class="text-purple-200 text-xs font-bold uppercase tracking-tighter">Student Engagement</span>
+                        </div>
+                        <div class="bg-purple-800/50 p-4 rounded-2xl border border-purple-700/50">
+                            <span class="block text-yellow-400 font-black text-2xl mb-1">∞</span>
+                            <span class="text-purple-200 text-xs font-bold uppercase tracking-tighter">Critical Thinking</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact Section -->
+        <section id="contact" class="text-center py-10">
+            <div class="inline-block p-12 bg-yellow-50 rounded-[4rem] border-2 border-dashed border-yellow-200">
+                <h2 class="text-4xl font-black text-purple-950 mb-4">Ready to collaborate?</h2>
+                <p class="text-slate-600 mb-10 max-w-md mx-auto font-medium">
+                    Questions about a lesson or interested in a custom build? Shoot over an email.
+                </p>
+                <a href="mailto:hello@rhettoricteach.com" class="inline-flex items-center gap-3 bg-purple-700 text-white px-10 py-5 rounded-2xl font-black hover:bg-purple-800 transition shadow-xl hover:shadow-purple-200 group">
+                    <i data-lucide="send" class="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition"></i>
+                    Email RhettoricTeach
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-purple-950 py-16 text-center">
+        <div class="max-w-5xl mx-auto px-6">
+            <div class="flex items-center justify-center gap-2 mb-6">
+                <div class="bg-yellow-400 p-1 rounded-md text-purple-900">
+                    <i data-lucide="graduation-cap" class="w-5 h-5"></i>
+                </div>
+                <span class="font-black text-xl brand-text text-white tracking-tighter">RhettoricTeach</span>
+            </div>
+            <p class="text-purple-300 text-sm font-medium">&copy; 2024 RhettoricTeach Lab. All rights reserved.</p>
+            <div class="mt-8 flex justify-center gap-6 text-purple-400">
+                <i data-lucide="github" class="w-5 h-5 hover:text-white cursor-pointer transition"></i>
+                <i data-lucide="twitter" class="w-5 h-5 hover:text-white cursor-pointer transition"></i>
+                <i data-lucide="linkedin" class="w-5 h-5 hover:text-white cursor-pointer transition"></i>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Smooth Scroll Logic
+        function scrollToSection(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                const navHeight = 80;
+                const position = element.getBoundingClientRect().top + window.pageYOffset - navHeight;
+                window.scrollTo({
+                    top: position,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    </script>
+</body>
+</html>
