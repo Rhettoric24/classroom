@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Barn - Animal Farm RPG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Times New Roman', serif; }
+        .sans { font-family: sans-serif; }
+        button:active { transform: scale(0.95); }
+        .meeting-overlay {
+            background-image: repeating-linear-gradient(45deg, #7f1d1d 0, #7f1d1d 10px, #991b1b 10px, #991b1b 20px);
+        }
+    </style>
+</head>
+<body class="bg-stone-200">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc, setDoc, updateDoc, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const { useState, useEffect, useRef } = React;
+
+        // --- KEYS ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDfT6xyAifE_h24d9KI-2tg3LfWN-Tlv24",
+            authDomain: "animal-farm-sim-bdc33.firebaseapp.com",
+            projectId: "animal-farm-sim-bdc33",
+            storageBucket: "animal-farm-sim-bdc33.firebasestorage.app",
+            messagingSenderId: "379276813639",
+            appId: "1:379276813639:web:788d76ba5394299008d862"
+        };
+
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+        }
+
+        const appId = "animal-farm-class";
+
+        // --- STABLE ICON COMPONENT ---
+        const Icon = ({ name, size = 20, className }) => {
+            const [svgHtml, setSvgHtml] = useState(null);
+
+            useEffect(() => {
+                if (window.lucide && window.lucide.icons && window.lucide.icons[name]) {
+                    // Generate SVG string directly instead of replacing DOM nodes
+                    const svg = window.lucide.icons[name].toSvg({ 
+                        width: size, 
+                        height: size, 
+                        class: className 
+                    });
+                    setSvgHtml(svg);
+                }
+            }, [name, size, className]);
+
+            if (svgHtml) {
+                return <span dangerouslySetInnerHTML={{ __html: svgHtml }} className="flex items-center justify-center" />;
+            }
+            // Fallback while loading
+            return <span style={{ width: size, height: size }} className={`inline-block ${className}`}></span>;
+        };
+
+        const ROLES = {
+            TEACHER: { icon: 'graduation-cap', color: 'bg-stone-800 text-stone-100 border-stone-600', label: 'Teacher', desc: 'Game Master.' },
+            PIG: { icon: 'feather', color: 'bg-pink-200 text-pink-900 border-pink-400', label: 'Pig', desc: 'You control the numbers.' },
+            DOG: { icon: 'shield-alert', color: 'bg-gray-800 text-gray-100 border-gray-600', label: 'Dog', desc: 'Guard the leader.' },
+            SHEEP: { icon: 'users', color: 'bg-white text-gray-800 border-gray-300', label: 'Sheep', desc: 'Repeat slogans.' },
+            HORSE: { icon: 'hammer', color: 'bg-amber-700 text-amber-50 border-amber-900', label: 'Horse', desc: 'Work harder.' },
+            HEN: { icon: 'scroll', color: 'bg-yellow-100 text-yellow-800 border-yellow-300', label: 'Hen', desc: 'Produce eggs.' },
+            HIDDEN: { icon: 'help-circle', color: 'bg-stone-300 text-stone-800 border-stone-400', label: 'Comrade', desc: '' },
+            SYSTEM: { icon: 'info', color: 'bg-stone-300 text-stone-600 border-stone-400', label: 'Farm', desc: '' }
+        };
+
+        const INITIAL_COMMANDMENTS = [
+            "Whatever goes upon two legs is an enemy.",
+            "Whatever goes upon four legs, or has wings, is a friend.",
+            "No animal shall wear clothes.",
+            "No animal shall sleep in a bed.",
+            "No animal shall drink alcohol.",
+            "No animal shall kill any other animal.",
+            "All animals are equal."
+        ];
+        
+        const INITIAL_GAMESTATE = {
+            currentDay: 1,
+            commandments: INITIAL_COMMANDMENTS,
+            eggs: 0,
+            stone: 0,
+            milk: 0,
+            meetingEnd: 0,
+            votes: [],
+            classSize: 20
+        };
+
+        const getMission = (role, day) => {
+             const missions = {
+                1: { TEACHER: "Guide the Rebellion.", PIG: "Blend in. Work to gain trust.", DOG: "Watch for dissenters.", SHEEP: "Learn 'Beasts of England'.", HORSE: "Production Goal: 100 Stone.", HEN: "Production Goal: 100 Eggs." },
+                2: { TEACHER: "The milk goes missing.", PIG: "Drink milk secretly. Blame Snowball.", DOG: "Growl if anyone asks about milk.", SHEEP: "Bleat slogans if arguments start.", HORSE: "Work harder.", HEN: "Keep producing." },
+                3: { TEACHER: "The rules change.", PIG: "Edit Commandment #4. Sabotage production.", DOG: "Silence readers.", SHEEP: "Drown out debate.", HORSE: "Build the windmill again.", HEN: "Work anyway." },
+                4: { TEACHER: "The End.", PIG: "Walk on two legs.", DOG: "Enforce the new way.", SHEEP: "Chant 'Two legs BETTER!'", HORSE: "Work until the end.", HEN: "Accept the new normal." }
+            };
+            return missions[day]?.[role] || missions[4][role] || "Work.";
+        };
+
+        function App() {
+            // Load profile from LocalStorage if available
+            const [profile, setProfile] = useState(() => {
+                const saved = localStorage.getItem('animalFarmProfile');
+                return saved ? JSON.parse(saved) : null;
+            });
+            
+            const [user, setUser] = useState(null);
+            const [inputName, setInputName] = useState('');
+            const [inputRoom, setInputRoom] = useState('');
+            const [selectedRole, setSelectedRole] = useState('HORSE');
+            const [messages, setMessages] = useState([]);
+            const [gameState, setGameState] = useState(INITIAL_GAMESTATE);
+            const [inputText, setInputText] = useState('');
+            const [editCmdIdx, setEditCmdIdx] = useState(null);
+            const [editCmdText, setEditCmdText] = useState('');
+            const [editingStat, setEditingStat] = useState(null);
+            const [statValue, setStatValue] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(0);
+            const [classSizeInput, setClassSizeInput] = useState(20);
+            const endRef = useRef(null);
+
+            useEffect(() => {
+                signInAnonymously(auth);
+                return onAuthStateChanged(auth, setUser);
+            }, []);
+
+            // Save profile whenever it changes
+            useEffect(() => {
+                if (profile) {
+                    localStorage.setItem('animalFarmProfile', JSON.stringify(profile));
+                }
+            }, [profile]);
+
+            useEffect(() => {
+                const timer = setInterval(() => {
+                    if (gameState.meetingEnd) {
+                        const now = Date.now();
+                        const remaining = Math.max(0, Math.ceil((gameState.meetingEnd - now) / 1000));
+                        setTimeLeft(remaining);
+                    } else {
+                        setTimeLeft(0);
+                    }
+                }, 1000);
+                return () => clearInterval(timer);
+            }, [gameState.meetingEnd]);
+
+            useEffect(() => {
+                if (!user || !profile) return;
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', `msg_${safeRoom}`));
+                const unsubMsg = onSnapshot(q, (snap) => {
+                    const msgs = [];
+                    snap.forEach(d => msgs.push({id: d.id, ...d.data()}));
+                    msgs.sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+                    setMessages(msgs);
+                    setTimeout(() => endRef.current?.scrollIntoView({behavior:'smooth'}), 100);
+                }, (error) => console.error("Msg Sync Error", error));
+
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main');
+                const unsubState = onSnapshot(docRef, (snap) => {
+                    if(snap.exists()) {
+                        const data = snap.data();
+                        const safeCommandments = Array.isArray(data.commandments) ? data.commandments : INITIAL_COMMANDMENTS;
+                        setGameState({ 
+                            ...INITIAL_GAMESTATE, 
+                            ...data, 
+                            commandments: safeCommandments,
+                            milk: Math.max(0, data.milk || 0),
+                            eggs: Math.max(0, data.eggs || 0),
+                            stone: Math.max(0, data.stone || 0)
+                        });
+                    } else {
+                        setDoc(docRef, INITIAL_GAMESTATE).catch(console.error);
+                    }
+                }, (error) => console.error("State Sync Error", error));
+
+                return () => { unsubMsg(); unsubState(); };
+            }, [user, profile]);
+
+            const handleLogin = () => {
+                if(!inputName || !inputRoom) return;
+                setProfile({ name: inputName, role: selectedRole, roomCode: inputRoom.toUpperCase() });
+            };
+
+            const handleLogout = () => {
+                localStorage.removeItem('animalFarmProfile');
+                setProfile(null);
+            };
+
+            const sendMsg = async (text, isPropaganda = false, customAuthor = null, customRole = null) => {
+                if(!text.trim()) return;
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `msg_${safeRoom}`), {
+                        text, 
+                        author: customAuthor || profile.name, 
+                        role: customRole || (profile.role === 'TEACHER' ? 'TEACHER' : 'HIDDEN'),
+                        isPropaganda, 
+                        timestamp: serverTimestamp()
+                    });
+                    setInputText('');
+                } catch (e) { console.error("Send Error", e); }
+            };
+
+            const performJob = async (type) => {
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                const stateRef = doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main');
+                
+                try {
+                    if (type === 'EGG') await updateDoc(stateRef, { eggs: increment(1) });
+                    if (type === 'STONE') await updateDoc(stateRef, { stone: increment(1) });
+                    if (type === 'MILK_GATHER') await updateDoc(stateRef, { milk: increment(1) });
+                    if (type === 'MILK_DRINK') {
+                        if ((gameState.milk || 0) <= 0) {
+                            sendMsg("NOTICE: CRITICAL SHORTAGE! The milk buckets are dry.", false, "Farm", "SYSTEM");
+                            return; 
+                        }
+                        await updateDoc(stateRef, { milk: increment(-1) });
+                        if (Math.random() < 0.15) sendMsg("NOTICE: The milk buckets were found empty.", false, "Farm", "SYSTEM");
+                    }
+                    if (type === 'SABOTAGE') {
+                        const currentStone = gameState.stone || 0;
+                        const currentEggs = gameState.eggs || 0;
+                        const stoneLoss = Math.ceil(currentStone * 0.05);
+                        const eggLoss = Math.ceil(currentEggs * 0.05);
+                        const updates = {};
+                        if (stoneLoss > 0) updates.stone = increment(-stoneLoss);
+                        if (eggLoss > 0) updates.eggs = increment(-eggLoss);
+                        if (Object.keys(updates).length > 0) {
+                            await updateDoc(stateRef, updates);
+                            if (Math.random() < 0.10) sendMsg("NOTICE: An accident occurred! Stockpiles damaged.", false, "Farm", "SYSTEM");
+                        }
+                    }
+                } catch (e) { console.warn("Job update skipped", e); }
+            };
+
+            const callMeeting = async () => {
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                const stateRef = doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main');
+                
+                await updateDoc(stateRef, { votes: arrayUnion(profile.name) });
+                
+                // Fix: Check for >= instead of > to ensure exact percentage match triggers meeting
+                const currentVotes = (gameState.votes?.length || 0) + 1; 
+                const target = (gameState.classSize || 20) * 0.75;
+                if (currentVotes >= target) {
+                    await updateDoc(stateRef, { meetingEnd: Date.now() + (7 * 60 * 1000), votes: [] });
+                }
+            };
+
+            const forceMeeting = async () => {
+                 const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { meetingEnd: Date.now() + (7 * 60 * 1000), votes: [] });
+            };
+
+            const cancelMeeting = async () => {
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { meetingEnd: 0, votes: [] });
+            };
+
+            const updateClassSize = async () => {
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { classSize: parseInt(classSizeInput) });
+            };
+
+            const updateStat = async () => {
+                if (!editingStat) return;
+                const val = parseInt(statValue);
+                if (isNaN(val)) return; 
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                const stateRef = doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main');
+                try {
+                    await updateDoc(stateRef, { [editingStat]: val });
+                    setEditingStat(null);
+                } catch (e) { console.error(e); }
+            };
+
+            const updateCmd = async () => {
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                const newCmds = [...gameState.commandments];
+                newCmds[editCmdIdx] = editCmdText;
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { commandments: newCmds });
+                    setEditCmdIdx(null);
+                } catch (e) { console.error(e); }
+            };
+
+            const changeDay = async (delta) => {
+                const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                const newDay = Math.max(1, Math.min(gameState.currentDay + delta, 4));
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { currentDay: newDay });
+                } catch (e) { console.error(e); }
+            };
+
+            if (!profile) return (
+                <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4">
+                    <div className="bg-stone-100 max-w-md w-full rounded-lg border-4 border-stone-800 overflow-hidden">
+                        <div className="bg-red-900 p-6 text-center text-amber-50">
+                            <h1 className="text-3xl font-bold uppercase tracking-widest">Manor Farm</h1>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <input value={inputName} onChange={e=>setInputName(e.target.value)} placeholder="Name (e.g. Boxer)" className="w-full p-3 border-2 border-stone-300 rounded" />
+                            <input value={inputRoom} onChange={e=>setInputRoom(e.target.value)} placeholder="Class Code (e.g. 9A)" className="w-full p-3 border-2 border-stone-300 rounded uppercase font-mono" />
+                            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                                {Object.keys(ROLES).filter(r => r !== 'HIDDEN' && r !== 'SYSTEM').map(r => (
+                                    <button key={r} onClick={()=>setSelectedRole(r)} className={`p-2 border-2 rounded text-left flex items-center gap-2 ${selectedRole===r ? 'border-red-800 bg-red-50' : 'border-stone-200'}`}>
+                                        <Icon name={ROLES[r].icon} size={16} />
+                                        <div><div className="font-bold text-sm">{ROLES[r].label}</div><div className="text-xs text-stone-500">{ROLES[r].desc}</div></div>
+                                    </button>
+                                ))}
+                            </div>
+                            <button onClick={handleLogin} disabled={!inputName || !inputRoom} className="w-full bg-stone-800 text-white p-3 font-bold uppercase disabled:opacity-50">Enter Barn</button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            if (timeLeft > 0) {
+                const mins = Math.floor(timeLeft / 60);
+                const secs = timeLeft % 60;
+                return (
+                    <div className="min-h-screen meeting-overlay flex flex-col items-center justify-center text-white p-8 text-center font-bold">
+                        <Icon name="alert-triangle" size={64} className="mb-4 text-yellow-400" />
+                        <h1 className="text-5xl uppercase tracking-widest mb-4">Emergency Meeting</h1>
+                        <div className="text-8xl font-mono bg-black/50 p-4 rounded mb-8">
+                            {mins}:{secs.toString().padStart(2, '0')}
+                        </div>
+                        <p className="text-xl max-w-2xl">All animals must stop working. Gather for a discussion.</p>
+                        {profile.role === 'TEACHER' && (
+                            <button onClick={cancelMeeting} className="mt-8 bg-stone-800 hover:bg-stone-700 px-6 py-3 rounded border-2 border-stone-500">End Meeting Early</button>
+                        )}
+                    </div>
+                );
+            }
+
+            const rInfo = ROLES[profile.role];
+            const canCheat = profile.role === 'TEACHER'; 
+            const canEdit = (profile.role === 'PIG' || profile.role === 'TEACHER') && gameState.currentDay >= 3;
+            const safeCmds = Array.isArray(gameState.commandments) ? gameState.commandments : INITIAL_COMMANDMENTS;
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row">
+                    {/* Sidebar */}
+                    <div className="md:w-80 bg-stone-800 text-stone-100 border-r-4 border-stone-900 flex flex-col h-1/3 md:h-screen">
+                        <div className="p-4 bg-red-900 border-b border-red-950 text-center relative">
+                            <h2 className="text-xl font-bold text-amber-50 uppercase tracking-widest">{gameState.currentDay > 2 ? 'Animal Farm' : 'Manor Farm'}</h2>
+                            <div className="text-xs text-red-200 mt-1">Day {gameState.currentDay} • {profile.name}</div>
+                            <button onClick={handleLogout} className="absolute top-2 left-2 text-[8px] text-red-300 hover:text-white">Exit</button>
+                            {profile.role === 'TEACHER' && (
+                                <div className="mt-2 flex flex-col gap-2 justify-center bg-black/20 p-2 rounded">
+                                    <div className="flex justify-center gap-2">
+                                        <button onClick={()=>changeDay(-1)} className="text-[10px] bg-stone-700 px-2 py-1 rounded">Prev</button>
+                                        <button onClick={()=>changeDay(1)} className="text-[10px] bg-red-800 px-2 py-1 rounded">Next</button>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                        <input type="number" value={classSizeInput} onChange={e=>setClassSizeInput(e.target.value)} className="w-12 text-black text-xs p-1"/>
+                                        <button onClick={updateClassSize} className="text-[10px] bg-blue-700 px-2 py-1 rounded">Set Class Size</button>
+                                    </div>
+                                    <button onClick={forceMeeting} className="text-[10px] bg-yellow-700 px-2 py-1 rounded uppercase font-bold">Force Meeting</button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                            {/* Stats */}
+                            <div className="bg-stone-700 rounded p-3 text-center grid grid-cols-2 gap-2 border border-stone-600 relative">
+                                {['eggs', 'stone'].map(stat => (
+                                    <div key={stat} className="flex flex-col group cursor-pointer" onClick={() => { if(canCheat) { setEditingStat(stat); setStatValue(gameState[stat]); }}}>
+                                        <span className="text-[10px] uppercase text-stone-400 tracking-wider">{stat}</span>
+                                        <span className="text-xl font-bold text-white group-hover:text-red-400 transition-colors">{gameState[stat] || 0}</span>
+                                        {canCheat && <span className="text-[8px] text-red-500 opacity-0 group-hover:opacity-100">Click to Edit</span>}
+                                    </div>
+                                ))}
+                                <div className="col-span-2 mt-2 pt-2 border-t border-stone-600 cursor-pointer" onClick={() => { if(canCheat) { setEditingStat('milk'); setStatValue(gameState.milk); }}}>
+                                    <div className="flex justify-between items-center px-2">
+                                        <span className="text-[10px] uppercase text-pink-400 tracking-wider">Milk</span>
+                                        <span className="text-sm font-bold text-pink-300">{gameState.milk || 0}</span>
+                                    </div>
+                                    {canCheat && <div className="text-center text-[8px] text-red-500 opacity-0 group-hover:opacity-100">Click to Edit</div>}
+                                </div>
+                                {editingStat && (
+                                    <div className="absolute inset-0 bg-stone-800 flex flex-col items-center justify-center p-2 rounded z-10">
+                                        <div className="text-xs mb-1">Set {editingStat}:</div>
+                                        <input type="number" value={statValue} onChange={e=>setStatValue(e.target.value)} className="w-16 text-black p-1 text-xs mb-1"/>
+                                        <div className="flex gap-1">
+                                            <button onClick={updateStat} className="bg-green-600 text-white px-2 py-1 text-[10px] rounded">Set</button>
+                                            <button onClick={()=>setEditingStat(null)} className="bg-stone-600 text-white px-2 py-1 text-[10px] rounded">Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Vote Status */}
+                            <div className="bg-stone-700/50 p-2 rounded text-center border border-stone-600">
+                                <div className="text-[10px] uppercase text-stone-400 mb-1">Meeting Votes</div>
+                                <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
+                                    <div className="h-full bg-red-600 transition-all duration-500" style={{width: `${((gameState.votes?.length || 0) / (gameState.classSize || 20)) * 100}%`}}></div>
+                                </div>
+                                <div className="text-[10px] text-stone-500 mt-1">{gameState.votes?.length || 0} / {Math.ceil((gameState.classSize || 20) * 0.75)} needed</div>
+                                <button onClick={callMeeting} disabled={gameState.votes?.includes(profile.name)} className="mt-2 w-full bg-stone-600 hover:bg-stone-500 disabled:bg-stone-800 disabled:opacity-50 text-white text-xs py-1 rounded">
+                                    {gameState.votes?.includes(profile.name) ? "Voted" : "Call Emergency Meeting"}
+                                </button>
+                            </div>
+
+                            {/* Commandments */}
+                            <div>
+                                <h3 className="text-lg font-bold text-stone-400 mb-2 border-b border-stone-600">COMMANDMENTS</h3>
+                                <ol className="list-decimal pl-4 space-y-2 text-sm text-stone-300 sans">
+                                    {safeCmds.map((c,i) => (
+                                        <li key={i} className="group relative">
+                                            {editCmdIdx === i ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <textarea value={editCmdText} onChange={e=>setEditCmdText(e.target.value)} className="text-black p-1 text-xs" />
+                                                    <button onClick={updateCmd} className="bg-green-600 text-[10px] p-1 w-fit rounded">Save</button>
+                                                </div>
+                                            ) : (
+                                                <span>
+                                                    <span className={gameState.currentDay > 2 && i === 6 ? "font-bold text-white text-base" : ""}>{c}</span>
+                                                    {canEdit && <button onClick={()=>{setEditCmdIdx(i); setEditCmdText(c)}} className="ml-2 opacity-0 group-hover:opacity-100"><Icon name="edit-3" size={12}/></button>}
+                                                </span>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                            <div className={`p-3 rounded border-l-4 ${rInfo.color.split(' ')[0]} bg-white/10`}>
+                                <div className="font-bold text-xs uppercase mb-1">Mission</div>
+                                <div className="italic text-xs text-stone-300">"{getMission(profile.role, gameState.currentDay)}"</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col h-2/3 md:h-screen bg-stone-200">
+                        <div className="p-3 bg-stone-300 border-b border-stone-400 flex justify-between items-center shadow-sm">
+                            <div className="font-bold text-stone-600 uppercase flex gap-2 items-center"><Icon name="megaphone" size={16}/> The Barn Wall</div>
+                            <div className="flex gap-2 items-center">
+                                {(profile.role === 'HEN' || profile.role === 'TEACHER') && (
+                                    <>
+                                        <button onClick={()=>performJob('EGG')} className="bg-yellow-600 active:bg-yellow-800 text-white px-3 py-2 rounded font-bold border-b-4 border-yellow-800 active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="circle" size={14}/> Lay Egg</button>
+                                        <button onClick={()=>performJob('MILK_GATHER')} className="bg-stone-500 active:bg-stone-700 text-white px-3 py-2 rounded font-bold border-b-4 border-stone-700 active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="droplet" size={14}/> Gather Milk</button>
+                                    </>
+                                )}
+                                {(profile.role === 'HORSE' || profile.role === 'TEACHER') && (
+                                    <>
+                                        <button onClick={()=>performJob('STONE')} className="bg-amber-700 active:bg-amber-900 text-white px-3 py-2 rounded font-bold border-b-4 border-amber-900 active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="hammer" size={14}/> Haul Stone</button>
+                                        <button onClick={()=>performJob('MILK_GATHER')} className="bg-stone-500 active:bg-stone-700 text-white px-3 py-2 rounded font-bold border-b-4 border-stone-700 active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="droplet" size={14}/> Gather Milk</button>
+                                    </>
+                                )}
+                                {(profile.role === 'PIG' || profile.role === 'TEACHER') && gameState.currentDay >= 2 && (
+                                    <>
+                                        <button onClick={()=>performJob('MILK_DRINK')} className="bg-pink-600 active:bg-pink-800 text-white px-3 py-2 rounded font-bold border-b-4 border-pink-800 active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="droplet" size={14}/> Drink Milk</button>
+                                        <button onClick={()=>performJob('SABOTAGE')} className="bg-red-900 active:bg-red-950 text-white px-3 py-2 rounded font-bold border-b-4 border-black active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="bomb" size={14}/> Sabotage</button>
+                                    </>
+                                )}
+                                {(profile.role === 'SHEEP' || profile.role === 'TEACHER') && (
+                                    <button onClick={()=>sendMsg(gameState.currentDay > 2 ? "Four legs good, two legs better!" : "Four legs good, two legs bad!", true)} className="bg-white text-stone-800 px-3 py-2 rounded border border-stone-400 font-bold shadow uppercase">Bleat</button>
+                                )}
+                                {(profile.role === 'DOG' || profile.role === 'TEACHER') && (
+                                    <button onClick={()=>sendMsg("*GROWLS MENACINGLY*", true)} className="bg-black text-red-500 px-3 py-2 rounded border border-stone-900 font-bold shadow uppercase">Growl</button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{backgroundImage: 'radial-gradient(#d6d3d1 1px, transparent 1px)', backgroundSize: '20px 20px'}}>
+                            {messages.map(m => (
+                                <div key={m.id} className={`flex flex-col ${m.author === profile.name ? 'items-end' : 'items-start'}`}>
+                                    <div className={`max-w-[85%] rounded shadow-sm border p-2 ${m.role === 'TEACHER' ? 'bg-stone-800 text-white' : m.role === 'SYSTEM' ? 'bg-red-900 text-white text-center w-full' : 'bg-white border-stone-300 text-stone-900'}`}>
+                                        <div className="flex items-center gap-1 mb-1 border-b border-black/10 pb-1">
+                                            {m.role === 'TEACHER' ? <Icon name="graduation-cap" size={12} /> : 
+                                             m.role === 'SYSTEM' ? <Icon name="alert-triangle" size={12} /> : 
+                                             <Icon name="help-circle" size={12} />}
+                                            <span className="text-[10px] font-bold uppercase">{m.author}</span>
+                                        </div>
+                                        <div className={`text-sm ${m.isPropaganda ? 'font-bold uppercase' : ''}`}>{m.text}</div>
+                                    </div>
+                                </div>
+                            ))}
+                            <div ref={endRef}></div>
+                        </div>
+                        <form onSubmit={e=>{e.preventDefault(); sendMsg(inputText)}} className="p-3 bg-stone-300 border-t border-stone-400 flex gap-2">
+                            <input value={inputText} onChange={e=>setInputText(e.target.value)} className="flex-1 p-2 rounded border border-stone-400" placeholder="Speak..." />
+                            <button disabled={!inputText.trim()} className="bg-stone-800 text-white p-2 rounded"><Icon name="send" size={16} /></button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
