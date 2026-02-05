@@ -55,7 +55,6 @@
 
             useEffect(() => {
                 if (window.lucide && window.lucide.icons && window.lucide.icons[name]) {
-                    // Generate SVG string directly instead of replacing DOM nodes
                     const svg = window.lucide.icons[name].toSvg({ 
                         width: size, 
                         height: size, 
@@ -68,7 +67,6 @@
             if (svgHtml) {
                 return <span dangerouslySetInnerHTML={{ __html: svgHtml }} className="flex items-center justify-center" />;
             }
-            // Fallback while loading
             return <span style={{ width: size, height: size }} className={`inline-block ${className}`}></span>;
         };
 
@@ -99,23 +97,53 @@
             eggs: 0,
             stone: 0,
             milk: 0,
+            milkConsumed: 0,
             meetingEnd: 0,
             votes: [],
-            classSize: 20
+            classSize: 20,
+            meetingsCalled: 0 // New tracker for meeting limit
         };
 
+        // --- UPDATED MISSIONS FROM DOCUMENT ---
         const getMission = (role, day) => {
              const missions = {
-                1: { TEACHER: "Guide the Rebellion.", PIG: "Blend in. Work to gain trust.", DOG: "Watch for dissenters.", SHEEP: "Learn 'Beasts of England'.", HORSE: "Production Goal: 100 Stone.", HEN: "Production Goal: 100 Eggs." },
-                2: { TEACHER: "The milk goes missing.", PIG: "Drink milk secretly. Blame Snowball.", DOG: "Growl if anyone asks about milk.", SHEEP: "Bleat slogans if arguments start.", HORSE: "Work harder.", HEN: "Keep producing." },
-                3: { TEACHER: "The rules change.", PIG: "Edit Commandment #4. Sabotage production.", DOG: "Silence readers.", SHEEP: "Drown out debate.", HORSE: "Build the windmill again.", HEN: "Work anyway." },
-                4: { TEACHER: "The End.", PIG: "Walk on two legs.", DOG: "Enforce the new way.", SHEEP: "Chant 'Two legs BETTER!'", HORSE: "Work until the end.", HEN: "Accept the new normal." }
+                1: { 
+                    TEACHER: "Monitor production. Ensure everyone understands the buttons. Keep the peace.", 
+                    PIG: "Gain trust. Pretend to work alongside the others. Don't reveal your role.", 
+                    DOG: "Observe the workers. Identify the loudest voices. Do not use your abilities yet.", 
+                    SHEEP: "Practice your chanting. Post 'Four legs good, two legs bad' occasionally.", 
+                    HORSE: "Build the windmill! Click 'Haul Stone' frequently. Aim for a high group total. Class with the largest number gets a treat.", 
+                    HEN: "Feed the farm! Click 'Lay Egg' often. We need a stockpile. Class with the largest number gets a treat." 
+                },
+                2: { 
+                    TEACHER: "The milk is disappearing. Watch the Pigs' deception. Be vague if students ask you.", 
+                    PIG: "The milk is yours! Click 'Drink Milk' when safe. If the count drops, blame the 'System' or the cat or anyone else. Try and drink a total of 100 times.", 
+                    DOG: "Protect the Pigs. If anyone asks about the milk, use 'Growl' to intimidate them. Try and get workers to gather milk as well as their normal jobs.", 
+                    SHEEP: "Disrupt complaints. If people discuss milk, spam 'Four legs good!' to drown them out. Work on creating a chant others will repeat.", 
+                    HORSE: "Ignore the rumors. Work harder! Your goal is to increase stone production despite shortages. Class with the largest number gets a treat.", 
+                    HEN: "Keep laying eggs. Don't ask where the milk is going. Production must continue. Class with the largest number gets a treat." 
+                },
+                3: { 
+                    TEACHER: "Tensions rise. Watch for 'Sabotage'. Facilitate an Emergency Meeting if called.", 
+                    PIG: "GREED: Drink another 100 milk (200 total). CONTROL: If the workers stockpile too much, they will think they don't need you. Destroy their progress (Sabotage) to keep them exhausted and dependent. Blame someone else (maybe Jones) immediately if noticed. Also, try to change 3 commandments slightly.", 
+                    DOG: "Silence traitors. If someone accuses a Pig, bark at them. Vote with Pigs in meetings.", 
+                    SHEEP: "Create chaos. If a meeting is called, confuse the voting. Chant relentlessly.", 
+                    HORSE: "Rebuild! The windmill was damaged. Click 'Haul Stone' faster. Don't let sabotage stop you. Class with the largest number of resources gets a treat.", 
+                    HEN: "They are taking your eggs! Protest by working slower, or prove loyalty by working harder. Class with the largest number of resources gets a treat." 
+                },
+                4: { 
+                    TEACHER: "The transition is complete. Announce the final rule change to the class.", 
+                    PIG: "Seize control. Edit the final Commandment to: '...but some are more equal'.", 
+                    DOG: "Enforce the new order. Growl at anyone quoting old laws. Support the Pigs' final edit.", 
+                    SHEEP: "Change the chant! Post 'Four legs good, two legs BETTER!' Popularize your chant. Drown out the past.", 
+                    HORSE: "You are exhausted. Work until you collapse. There is no retirement.", 
+                    HEN: "Accept the new regime. Produce for the pigs. Survival is the only goal." 
+                }
             };
             return missions[day]?.[role] || missions[4][role] || "Work.";
         };
 
         function App() {
-            // Load profile from LocalStorage if available
             const [profile, setProfile] = useState(() => {
                 const saved = localStorage.getItem('animalFarmProfile');
                 return saved ? JSON.parse(saved) : null;
@@ -125,9 +153,14 @@
             const [inputName, setInputName] = useState('');
             const [inputRoom, setInputRoom] = useState('');
             const [selectedRole, setSelectedRole] = useState('HORSE');
+            const [teacherCode, setTeacherCode] = useState('');
             const [messages, setMessages] = useState([]);
             const [gameState, setGameState] = useState(INITIAL_GAMESTATE);
             const [inputText, setInputText] = useState('');
+            
+            // New: Teacher Msg Target
+            const [msgTarget, setMsgTarget] = useState('ALL');
+
             const [editCmdIdx, setEditCmdIdx] = useState(null);
             const [editCmdText, setEditCmdText] = useState('');
             const [editingStat, setEditingStat] = useState(null);
@@ -141,7 +174,6 @@
                 return onAuthStateChanged(auth, setUser);
             }, []);
 
-            // Save profile whenever it changes
             useEffect(() => {
                 if (profile) {
                     localStorage.setItem('animalFarmProfile', JSON.stringify(profile));
@@ -185,7 +217,9 @@
                             commandments: safeCommandments,
                             milk: Math.max(0, data.milk || 0),
                             eggs: Math.max(0, data.eggs || 0),
-                            stone: Math.max(0, data.stone || 0)
+                            stone: Math.max(0, data.stone || 0),
+                            milkConsumed: Math.max(0, data.milkConsumed || 0),
+                            meetingsCalled: Math.max(0, data.meetingsCalled || 0)
                         });
                     } else {
                         setDoc(docRef, INITIAL_GAMESTATE).catch(console.error);
@@ -197,23 +231,36 @@
 
             const handleLogin = () => {
                 if(!inputName || !inputRoom) return;
+                
+                if (selectedRole === 'TEACHER') {
+                    if (teacherCode !== '1984') {
+                        alert("Incorrect Access Code!");
+                        return;
+                    }
+                }
+
                 setProfile({ name: inputName, role: selectedRole, roomCode: inputRoom.toUpperCase() });
             };
 
             const handleLogout = () => {
                 localStorage.removeItem('animalFarmProfile');
                 setProfile(null);
+                setTeacherCode('');
             };
 
             const sendMsg = async (text, isPropaganda = false, customAuthor = null, customRole = null) => {
                 if(!text.trim()) return;
                 const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                
+                const target = profile.role === 'TEACHER' ? msgTarget : 'ALL';
+
                 try {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `msg_${safeRoom}`), {
                         text, 
                         author: customAuthor || profile.name, 
                         role: customRole || (profile.role === 'TEACHER' ? 'TEACHER' : 'HIDDEN'),
-                        isPropaganda, 
+                        isPropaganda,
+                        targetRole: target,
                         timestamp: serverTimestamp()
                     });
                     setInputText('');
@@ -233,7 +280,10 @@
                             sendMsg("NOTICE: CRITICAL SHORTAGE! The milk buckets are dry.", false, "Farm", "SYSTEM");
                             return; 
                         }
-                        await updateDoc(stateRef, { milk: increment(-1) });
+                        await updateDoc(stateRef, { 
+                            milk: increment(-1),
+                            milkConsumed: increment(1)
+                        });
                         if (Math.random() < 0.15) sendMsg("NOTICE: The milk buckets were found empty.", false, "Farm", "SYSTEM");
                     }
                     if (type === 'SABOTAGE') {
@@ -253,21 +303,28 @@
             };
 
             const callMeeting = async () => {
+                // Limit Logic: 2 per month
+                if ((gameState.meetingsCalled || 0) >= 2) return;
+
                 const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
                 const stateRef = doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main');
                 
                 await updateDoc(stateRef, { votes: arrayUnion(profile.name) });
                 
-                // Fix: Check for >= instead of > to ensure exact percentage match triggers meeting
                 const currentVotes = (gameState.votes?.length || 0) + 1; 
                 const target = (gameState.classSize || 20) * 0.75;
                 if (currentVotes >= target) {
-                    await updateDoc(stateRef, { meetingEnd: Date.now() + (7 * 60 * 1000), votes: [] });
+                    await updateDoc(stateRef, { 
+                        meetingEnd: Date.now() + (7 * 60 * 1000), 
+                        votes: [],
+                        meetingsCalled: increment(1) // Count the meeting
+                    });
                 }
             };
 
             const forceMeeting = async () => {
                  const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
+                 // Teacher force doesn't count towards the limit
                  await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { meetingEnd: Date.now() + (7 * 60 * 1000), votes: [] });
             };
 
@@ -307,7 +364,11 @@
                 const safeRoom = profile.roomCode.replace(/[^a-zA-Z0-9]/g, '');
                 const newDay = Math.max(1, Math.min(gameState.currentDay + delta, 4));
                 try {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { currentDay: newDay });
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', `state_${safeRoom}`, 'main'), { 
+                        currentDay: newDay,
+                        meetingsCalled: 0, // Reset meeting count on new month
+                        votes: [] // Clear active votes
+                    });
                 } catch (e) { console.error(e); }
             };
 
@@ -328,7 +389,22 @@
                                     </button>
                                 ))}
                             </div>
-                            <button onClick={handleLogin} disabled={!inputName || !inputRoom} className="w-full bg-stone-800 text-white p-3 font-bold uppercase disabled:opacity-50">Enter Barn</button>
+                            
+                            {/* TEACHER CODE INPUT */}
+                            {selectedRole === 'TEACHER' && (
+                                <div className="mt-2 animate-pulse">
+                                    <label className="block text-xs font-bold text-red-900 uppercase mb-1">Teacher Access Code</label>
+                                    <input 
+                                        type="password" 
+                                        value={teacherCode} 
+                                        onChange={e=>setTeacherCode(e.target.value)} 
+                                        placeholder="Enter Access Code" 
+                                        className="w-full p-3 border-2 border-red-800 bg-red-50 text-red-900 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    />
+                                </div>
+                            )}
+
+                            <button onClick={handleLogin} disabled={!inputName || !inputRoom} className="w-full bg-stone-800 text-white p-3 font-bold uppercase disabled:opacity-50 mt-2">Enter Barn</button>
                         </div>
                     </div>
                 </div>
@@ -363,7 +439,7 @@
                     <div className="md:w-80 bg-stone-800 text-stone-100 border-r-4 border-stone-900 flex flex-col h-1/3 md:h-screen">
                         <div className="p-4 bg-red-900 border-b border-red-950 text-center relative">
                             <h2 className="text-xl font-bold text-amber-50 uppercase tracking-widest">{gameState.currentDay > 2 ? 'Animal Farm' : 'Manor Farm'}</h2>
-                            <div className="text-xs text-red-200 mt-1">Day {gameState.currentDay} • {profile.name}</div>
+                            <div className="text-xs text-red-200 mt-1">Month {gameState.currentDay} • {profile.name}</div>
                             <button onClick={handleLogout} className="absolute top-2 left-2 text-[8px] text-red-300 hover:text-white">Exit</button>
                             {profile.role === 'TEACHER' && (
                                 <div className="mt-2 flex flex-col gap-2 justify-center bg-black/20 p-2 rounded">
@@ -396,6 +472,13 @@
                                     </div>
                                     {canCheat && <div className="text-center text-[8px] text-red-500 opacity-0 group-hover:opacity-100">Click to Edit</div>}
                                 </div>
+                                {/* NEW: STOLEN MILK TRACKER (Visible only to PIGS and TEACHERS) */}
+                                {(profile.role === 'PIG' || profile.role === 'TEACHER') && (
+                                    <div className="col-span-2 flex justify-between items-center px-2 mt-1">
+                                         <span className="text-[10px] uppercase text-pink-600 tracking-wider">Stolen</span>
+                                         <span className="text-xs font-bold text-pink-500">{gameState.milkConsumed || 0} / 200</span>
+                                    </div>
+                                )}
                                 {editingStat && (
                                     <div className="absolute inset-0 bg-stone-800 flex flex-col items-center justify-center p-2 rounded z-10">
                                         <div className="text-xs mb-1">Set {editingStat}:</div>
@@ -409,16 +492,23 @@
                             </div>
 
                             {/* Vote Status */}
-                            <div className="bg-stone-700/50 p-2 rounded text-center border border-stone-600">
-                                <div className="text-[10px] uppercase text-stone-400 mb-1">Meeting Votes</div>
-                                <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
-                                    <div className="h-full bg-red-600 transition-all duration-500" style={{width: `${((gameState.votes?.length || 0) / (gameState.classSize || 20)) * 100}%`}}></div>
+                            {gameState.currentDay >= 3 && (
+                                <div className="bg-stone-700/50 p-2 rounded text-center border border-stone-600">
+                                    <div className="text-[10px] uppercase text-stone-400 mb-1">Meeting Votes</div>
+                                    <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
+                                        <div className="h-full bg-red-600 transition-all duration-500" style={{width: `${((gameState.votes?.length || 0) / (gameState.classSize || 20)) * 100}%`}}></div>
+                                    </div>
+                                    <div className="text-[10px] text-stone-500 mt-1">{gameState.votes?.length || 0} / {Math.ceil((gameState.classSize || 20) * 0.75)} needed</div>
+                                    <div className="text-[10px] text-stone-400 mt-1">Meetings Remaining: {2 - (gameState.meetingsCalled || 0)}</div>
+                                    <button 
+                                        onClick={callMeeting} 
+                                        disabled={gameState.votes?.includes(profile.name) || (gameState.meetingsCalled || 0) >= 2}
+                                        className="mt-2 w-full bg-stone-600 hover:bg-stone-500 disabled:bg-stone-800 disabled:opacity-50 text-white text-xs py-1 rounded"
+                                    >
+                                        {gameState.votes?.includes(profile.name) ? "Voted" : "Call Emergency Meeting"}
+                                    </button>
                                 </div>
-                                <div className="text-[10px] text-stone-500 mt-1">{gameState.votes?.length || 0} / {Math.ceil((gameState.classSize || 20) * 0.75)} needed</div>
-                                <button onClick={callMeeting} disabled={gameState.votes?.includes(profile.name)} className="mt-2 w-full bg-stone-600 hover:bg-stone-500 disabled:bg-stone-800 disabled:opacity-50 text-white text-xs py-1 rounded">
-                                    {gameState.votes?.includes(profile.name) ? "Voted" : "Call Emergency Meeting"}
-                                </button>
-                            </div>
+                            )}
 
                             {/* Commandments */}
                             <div>
@@ -432,16 +522,19 @@
                                                     <button onClick={updateCmd} className="bg-green-600 text-[10px] p-1 w-fit rounded">Save</button>
                                                 </div>
                                             ) : (
-                                                <span>
-                                                    <span className={gameState.currentDay > 2 && i === 6 ? "font-bold text-white text-base" : ""}>{c}</span>
-                                                    {canEdit && <button onClick={()=>{setEditCmdIdx(i); setEditCmdText(c)}} className="ml-2 opacity-0 group-hover:opacity-100"><Icon name="edit-3" size={12}/></button>}
+                                                <span 
+                                                    onClick={() => { if(canEdit) { setEditCmdIdx(i); setEditCmdText(c); } }}
+                                                    className={`block py-1 ${canEdit ? "cursor-pointer hover:bg-white/5 rounded px-1 group" : ""} ${gameState.currentDay > 2 && i === 6 ? "font-bold text-white text-base" : ""}`}
+                                                >
+                                                    {c}
+                                                    {canEdit && <span className="ml-2 text-[10px] text-stone-500 opacity-0 group-hover:opacity-100 italic">(Click to Edit)</span>}
                                                 </span>
                                             )}
                                         </li>
                                     ))}
                                 </ol>
                             </div>
-                            <div className={`p-3 rounded border-l-4 ${rInfo.color.split(' ')[0]} bg-white/10`}>
+                            <div className="p-3 rounded bg-stone-800 text-stone-200 border-l-4 border-stone-500">
                                 <div className="font-bold text-xs uppercase mb-1">Mission</div>
                                 <div className="italic text-xs text-stone-300">"{getMission(profile.role, gameState.currentDay)}"</div>
                             </div>
@@ -452,6 +545,21 @@
                         <div className="p-3 bg-stone-300 border-b border-stone-400 flex justify-between items-center shadow-sm">
                             <div className="font-bold text-stone-600 uppercase flex gap-2 items-center"><Icon name="megaphone" size={16}/> The Barn Wall</div>
                             <div className="flex gap-2 items-center">
+                                {/* TEACHER CONTROLS: TARGET DROPDOWN */}
+                                {profile.role === 'TEACHER' && (
+                                    <select 
+                                        value={msgTarget} 
+                                        onChange={(e) => setMsgTarget(e.target.value)}
+                                        className="p-2 rounded border border-stone-500 text-xs bg-white"
+                                    >
+                                        <option value="ALL">Everyone</option>
+                                        <option value="PIG">Pigs Only</option>
+                                        <option value="DOG">Dogs Only</option>
+                                        <option value="SHEEP">Sheep Only</option>
+                                        <option value="HORSE">Horses Only</option>
+                                        <option value="HEN">Hens Only</option>
+                                    </select>
+                                )}
                                 {(profile.role === 'HEN' || profile.role === 'TEACHER') && (
                                     <>
                                         <button onClick={()=>performJob('EGG')} className="bg-yellow-600 active:bg-yellow-800 text-white px-3 py-2 rounded font-bold border-b-4 border-yellow-800 active:border-b-0 active:mt-1 flex items-center gap-1 shadow"><Icon name="circle" size={14}/> Lay Egg</button>
@@ -479,22 +587,44 @@
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{backgroundImage: 'radial-gradient(#d6d3d1 1px, transparent 1px)', backgroundSize: '20px 20px'}}>
-                            {messages.map(m => (
-                                <div key={m.id} className={`flex flex-col ${m.author === profile.name ? 'items-end' : 'items-start'}`}>
-                                    <div className={`max-w-[85%] rounded shadow-sm border p-2 ${m.role === 'TEACHER' ? 'bg-stone-800 text-white' : m.role === 'SYSTEM' ? 'bg-red-900 text-white text-center w-full' : 'bg-white border-stone-300 text-stone-900'}`}>
-                                        <div className="flex items-center gap-1 mb-1 border-b border-black/10 pb-1">
-                                            {m.role === 'TEACHER' ? <Icon name="graduation-cap" size={12} /> : 
-                                             m.role === 'SYSTEM' ? <Icon name="alert-triangle" size={12} /> : 
-                                             <Icon name="help-circle" size={12} />}
-                                            <span className="text-[10px] font-bold uppercase">{m.author}</span>
+                            {messages.map((m) => {
+                                const isPrivate = m.targetRole && m.targetRole !== 'ALL';
+                                const canView = !isPrivate || profile.role === 'TEACHER' || profile.role === m.targetRole;
+                                
+                                if (!canView) return null;
+
+                                return (
+                                    <div key={m.id} className={`flex flex-col ${m.author === profile.name ? 'items-end' : 'items-start'}`}>
+                                        <div className={`max-w-[85%] rounded shadow-sm border p-2 ${
+                                            isPrivate 
+                                                ? 'bg-yellow-100 border-2 border-yellow-500 text-yellow-900' 
+                                                : m.role === 'TEACHER' 
+                                                    ? 'bg-stone-800 text-white' 
+                                                    : m.role === 'SYSTEM' 
+                                                        ? 'bg-red-900 text-white text-center w-full' 
+                                                        : 'bg-white border-stone-300 text-stone-900'
+                                        }`}>
+                                            <div className={`flex items-center gap-1 mb-1 border-b pb-1 ${isPrivate ? 'border-yellow-300' : 'border-black/10'}`}>
+                                                {isPrivate && <Icon name="lock" size={12} className="text-yellow-600 mr-1" />}
+                                                {m.role === 'TEACHER' ? <Icon name="graduation-cap" size={12} /> : 
+                                                 m.role === 'SYSTEM' ? <Icon name="alert-triangle" size={12} /> : 
+                                                 <Icon name="help-circle" size={12} />}
+                                                
+                                                <span className="text-[10px] font-bold uppercase">
+                                                    {isPrivate && profile.role !== 'TEACHER' ? "SECRET from " : ""}
+                                                    {m.author}
+                                                    {isPrivate && profile.role === 'TEACHER' ? ` (to ${m.targetRole})` : ""}
+                                                </span>
+                                            </div>
+                                            <div className={`text-sm ${m.isPropaganda ? 'font-bold uppercase' : ''}`}>{m.text}</div>
                                         </div>
-                                        <div className={`text-sm ${m.isPropaganda ? 'font-bold uppercase' : ''}`}>{m.text}</div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                             <div ref={endRef}></div>
                         </div>
-                        <form onSubmit={e=>{e.preventDefault(); sendMsg(inputText)}} className="p-3 bg-stone-300 border-t border-stone-400 flex gap-2">
+                        <form onSubmit={e=>{e.preventDefault(); sendMsg(inputText)}} className="p-3 bg-stone-300 border-t border-stone-400 flex gap-2 items-center">
+                            
                             <input value={inputText} onChange={e=>setInputText(e.target.value)} className="flex-1 p-2 rounded border border-stone-400" placeholder="Speak..." />
                             <button disabled={!inputText.trim()} className="bg-stone-800 text-white p-2 rounded"><Icon name="send" size={16} /></button>
                         </form>
